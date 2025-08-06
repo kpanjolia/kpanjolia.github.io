@@ -1,1 +1,450 @@
-Hello World
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Netflix Top 10 During COVID</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Cambria Math', serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #0f0f0f;
+            color: #ffffff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #e50914;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #999;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+        }
+
+        .level-indicator {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+            color: #e50914;
+        }
+
+        #visualization {
+            background-color: #1a1a1a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-title {
+            text-align: center;
+            font-size: 1.4em;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #e50914;
+            pointer-events: none;
+            font-size: 12px;
+            z-index: 1000;
+        }
+
+        .axis {
+            font-size: 12px;
+            fill: #ccc;
+        }
+
+        .axis-label {
+            font-size: 14px;
+            fill: #fff;
+        }
+
+        .loading {
+            text-align: center;
+            font-size: 1.2em;
+            color: #999;
+            margin: 50px 0;
+        }
+
+        .error {
+            text-align: center;
+            color: #e50914;
+            font-size: 1.1em;
+            margin: 50px 0;
+        }
+
+        .navigation {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .nav-button {
+            background-color: #e50914;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-button:hover {
+            background-color: #b20710;
+        }
+
+        .nav-button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Netflix Top 10 During COVID</h1>
+        <p class="subtitle">Daily Rankings of Movies and TV Shows in the US</p>
+        
+        <div class="level-indicator">
+            <span id="current-level">Level 1: The Streaming Landscape</span>
+        </div>
+        
+        <div id="visualization">
+            <div class="chart-title" id="chart-title">Loading Netflix data...</div>
+            <div class="loading" id="loading">Fetching data from repository...</div>
+        </div>
+        
+        <div class="navigation">
+            <button class="nav-button" id="prev-btn" disabled>Previous Level</button>
+            <button class="nav-button" id="next-btn" disabled>Next Level</button>
+            <button class="nav-button" id="reset-btn" disabled>Reset to Overview</button>
+        </div>
+    </div>
+
+    <script>
+        const config = {
+            width: 1000,
+            height: 600,
+            margin: { top: 40, right: 80, bottom: 80, left: 80 },
+            dataPath: 'netflix_daily_top_ten.csv'
+        };
+
+        let rawData = [];
+        let processedData = [];
+        let currentLevel = 1;
+        let svg, tooltip;
+
+        // Initialize the visualization
+        function init() {
+            setupSVG();
+            setupTooltip();
+            loadData();
+            setupNavigation();
+        }
+
+        // Setup SVG container
+        function setupSVG() {
+            const container = d3.select("#visualization");
+            
+            svg = container.append("svg")
+                .attr("width", config.width)
+                .attr("height", config.height)
+                .style("display", "block")
+                .style("margin", "0 auto");
+
+            // Add a group for the main chart area
+            svg.append("g")
+                .attr("class", "chart-area")
+                .attr("transform", `translate(${config.margin.left},${config.margin.top})`);
+        }
+
+        // Setup tooltip
+        function setupTooltip() {
+            tooltip = d3.select("body")
+                .append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0);
+        }
+
+        // Load and process data
+        async function loadData() {
+            try {
+                const data = await d3.csv(config.dataPath);
+                
+                if (!data || data.length === 0) {
+                    showError("No data found. Please check your data file path.");
+                    return;
+                }
+
+                rawData = data;
+                processedData = processData(data);
+                
+                hideLoading();
+                drawLevel1();
+                enableNavigation();
+                
+            } catch (error) {
+                console.error("Error loading data:", error);
+                showError(`Error loading data: ${error.message}. Make sure your CSV file is accessible at: ${config.dataPath}`);
+            }
+        }
+
+        // Process raw CSV data
+        function processData(data) {
+            // This function will need to be customized based on your CSV structure
+            // Assuming columns like: date, title, rank, category, etc.
+            
+            return data.map(d => ({
+                date: d3.timeParse("%Y-%m-%d")(d.date), // Adjust date format as needed
+                title: d.title,
+                rank: +d.rank,
+                category: d.category || 'Unknown',
+                // Add other fields as needed
+            })).filter(d => d.date); // Filter out invalid dates
+        }
+
+        // Level 1: Overview visualization
+        function drawLevel1() {
+            updateLevelIndicator(1, "Level 1: The Streaming Landscape");
+            updateChartTitle("All Top 10 Content Over Time");
+
+            const chartArea = svg.select(".chart-area");
+            chartArea.selectAll("*").remove(); // Clear previous content
+
+            if (processedData.length === 0) {
+                showError("No valid data to display");
+                return;
+            }
+
+            // Create a simple line chart showing content rankings over time
+            // Group data by title for multiple lines
+            const titleData = d3.group(processedData, d => d.title);
+            
+            // Set up scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(processedData, d => d.date))
+                .range([0, config.width - config.margin.left - config.margin.right]);
+
+            const yScale = d3.scaleLinear()
+                .domain([10, 1]) // Reverse scale (rank 1 at top)
+                .range([config.height - config.margin.top - config.margin.bottom, 0]);
+
+            const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+            // Add axes
+            chartArea.append("g")
+                .attr("class", "axis")
+                .attr("transform", `translate(0, ${config.height - config.margin.top - config.margin.bottom})`)
+                .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat("%b %Y")));
+
+            chartArea.append("g")
+                .attr("class", "axis")
+                .call(d3.axisLeft(yScale));
+
+            // Add axis labels
+            chartArea.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - config.margin.left)
+                .attr("x", 0 - (config.height - config.margin.top - config.margin.bottom) / 2)
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Ranking (1 = Top)");
+
+            chartArea.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", `translate(${(config.width - config.margin.left - config.margin.right) / 2}, ${config.height - config.margin.top - config.margin.bottom + 50})`)
+                .style("text-anchor", "middle")
+                .text("Date");
+
+            // Line generator
+            const line = d3.line()
+                .x(d => xScale(d.date))
+                .y(d => yScale(d.rank))
+                .curve(d3.curveMonotoneX);
+
+            // Draw lines for top titles (limit to prevent overcrowding)
+            let titleCount = 0;
+            titleData.forEach((values, title) => {
+                if (titleCount >= 10) return; // Limit to top 10 most frequent titles
+                
+                chartArea.append("path")
+                    .datum(values.sort((a, b) => a.date - b.date))
+                    .attr("class", "title-line")
+                    .attr("fill", "none")
+                    .attr("stroke", colorScale(title))
+                    .attr("stroke-width", 2)
+                    .attr("d", line)
+                    .style("opacity", 0.7)
+                    .on("mouseover", function(event, d) {
+                        d3.select(this).style("opacity", 1).attr("stroke-width", 3);
+                        showTooltip(event, title, d);
+                    })
+                    .on("mouseout", function(event, d) {
+                        d3.select(this).style("opacity", 0.7).attr("stroke-width", 2);
+                        hideTooltip();
+                    })
+                    .on("click", function(event, d) {
+                        drillDown(title, d);
+                    });
+                
+                titleCount++;
+            });
+
+            // Add instruction text
+            chartArea.append("text")
+                .attr("x", (config.width - config.margin.left - config.margin.right) / 2)
+                .attr("y", -20)
+                .attr("text-anchor", "middle")
+                .style("fill", "#999")
+                .style("font-size", "14px")
+                .text("Click on a line to drill down into specific content");
+        }
+
+        // Drill down to Level 2
+        function drillDown(selectedTitle, data) {
+            currentLevel = 2;
+            updateLevelIndicator(2, `Level 2: Focus on "${selectedTitle}"`);
+            updateChartTitle(`Detailed Analysis: ${selectedTitle}`);
+            
+            // Implement Level 2 visualization here
+            // This would show more detailed analysis of the selected content
+            const chartArea = svg.select(".chart-area");
+            chartArea.selectAll("*").remove();
+            
+            // Placeholder for Level 2 content
+            chartArea.append("text")
+                .attr("x", (config.width - config.margin.left - config.margin.right) / 2)
+                .attr("y", (config.height - config.margin.top - config.margin.bottom) / 2)
+                .attr("text-anchor", "middle")
+                .style("fill", "#999")
+                .style("font-size", "18px")
+                .text(`Level 2: Detailed view of "${selectedTitle}" coming soon...`);
+                
+            updateNavButtons();
+        }
+
+        // Utility functions
+        function showTooltip(event, title, data) {
+            tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+            
+            tooltip.html(`<strong>${title}</strong><br/>
+                         Click to explore in detail`)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        }
+
+        function hideTooltip() {
+            tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+        }
+
+        function updateLevelIndicator(level, text) {
+            d3.select("#current-level").text(text);
+        }
+
+        function updateChartTitle(title) {
+            d3.select("#chart-title").text(title);
+        }
+
+        function hideLoading() {
+            d3.select("#loading").style("display", "none");
+        }
+
+        function showError(message) {
+            d3.select("#loading").remove();
+            d3.select("#visualization").append("div")
+                .attr("class", "error")
+                .text(message);
+        }
+
+        function setupNavigation() {
+            d3.select("#prev-btn").on("click", goToPreviousLevel);
+            d3.select("#next-btn").on("click", goToNextLevel);
+            d3.select("#reset-btn").on("click", resetToOverview);
+        }
+
+        function enableNavigation() {
+            d3.select("#reset-btn").property("disabled", false);
+            updateNavButtons();
+        }
+
+        function updateNavButtons() {
+            d3.select("#prev-btn").property("disabled", currentLevel === 1);
+            d3.select("#next-btn").property("disabled", currentLevel === 3);
+        }
+
+        function goToPreviousLevel() {
+            if (currentLevel > 1) {
+                currentLevel--;
+                if (currentLevel === 1) {
+                    drawLevel1();
+                }
+                updateNavButtons();
+            }
+        }
+
+        function goToNextLevel() {
+            if (currentLevel < 3) {
+                currentLevel++;
+                // Implement Level 3 here
+                updateNavButtons();
+            }
+        }
+
+        function resetToOverview() {
+            currentLevel = 1;
+            drawLevel1();
+            updateNavButtons();
+        }
+
+        // Make the visualization responsive
+        function resizeVisualization() {
+            const container = d3.select("#visualization");
+            const containerWidth = parseInt(container.style("width"));
+            
+            if (containerWidth < config.width) {
+                svg.attr("width", containerWidth)
+                   .attr("height", (containerWidth / config.width) * config.height);
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            init();
+            window.addEventListener('resize', resizeVisualization);
+        });
+    </script>
+</body>
+</html>
