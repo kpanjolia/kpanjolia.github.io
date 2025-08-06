@@ -132,7 +132,7 @@
     <div class="container">
         <h1>Netflix Top 10 During COVID</h1>
         <p class="subtitle">Daily Rankings of Movies and TV Shows in the US</p>
-        
+        <!-- TODO: change this text -->
         <div class="level-indicator">
             <span id="current-level">Level 1: The Streaming Landscape</span>
         </div>
@@ -141,7 +141,7 @@
             <div class="chart-title" id="chart-title">Loading Netflix data...</div>
             <div class="loading" id="loading">Fetching data from repository...</div>
         </div>
-        
+        <!-- TODO: change the button labels -->
         <div class="navigation">
             <button class="nav-button" id="prev-btn" disabled>Previous Level</button>
             <button class="nav-button" id="next-btn" disabled>Next Level</button>
@@ -154,7 +154,7 @@
             width: 1000,
             height: 600,
             margin: { top: 40, right: 80, bottom: 80, left: 80 },
-            dataPath: 'netflix_daily_top_ten.csv'
+            dataPath: "data/netflix_daily_top_ten.csv"
         };
 
         let rawData = [];
@@ -162,7 +162,6 @@
         let currentLevel = 1;
         let svg, tooltip;
 
-        // Initialize the visualization
         function init() {
             setupSVG();
             setupTooltip();
@@ -170,7 +169,6 @@
             setupNavigation();
         }
 
-        // Setup SVG container
         function setupSVG() {
             const container = d3.select("#visualization");
             
@@ -180,13 +178,12 @@
                 .style("display", "block")
                 .style("margin", "0 auto");
 
-            // Add a group for the main chart area
+            // group for main chart area
             svg.append("g")
                 .attr("class", "chart-area")
                 .attr("transform", `translate(${config.margin.left},${config.margin.top})`);
         }
 
-        // Setup tooltip
         function setupTooltip() {
             tooltip = d3.select("body")
                 .append("div")
@@ -194,7 +191,7 @@
                 .style("opacity", 0);
         }
 
-        // Load and process data
+        // load and process data
         async function loadData() {
             try {
                 const data = await d3.csv(config.dataPath);
@@ -219,23 +216,25 @@
 
         // Process raw CSV data
         function processData(data) {
-            // This function will need to be customized based on your CSV structure
-            // Assuming columns like: date, title, rank, category, etc.
-            
             return data.map(d => ({
-                date: d3.timeParse("%Y-%m-%d")(d.date), // Adjust date format as needed
-                title: d.title,
-                rank: +d.rank,
-                category: d.category || 'Unknown',
-                // Add other fields as needed
-            })).filter(d => d.date); // Filter out invalid dates
+                date: d3.timeParse("%Y-%m-%d")(d["As of"]), 
+                title: d["Title"],
+                rank: +d["Rank"],
+                type: d["Type"],
+                releaseDate: d["Netflix Release Date"],
+            })); 
         }
 
         // Level 1: Overview visualization
         function drawLevel1() {
             updateLevelIndicator(1, "Level 1: The Streaming Landscape");
             updateChartTitle("All Top 10 Content Over Time");
-
+            processedData.forEach(d => {
+                console.log(d.date);  
+                console.log(d.title); 
+                console.log(d.rank); 
+            });
+            
             const chartArea = svg.select(".chart-area");
             chartArea.selectAll("*").remove(); // Clear previous content
 
