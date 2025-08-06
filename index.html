@@ -154,7 +154,7 @@
             width: 1000,
             height: 600,
             margin: { top: 40, right: 80, bottom: 80, left: 80 },
-            dataPath: "data/netflix_daily_top_ten.csv"
+            dataPath: "https://github.com/kpanjolia/kpanjolia.github.io/blob/main/data/netflix_daily_top_10.csv"
         };
 
         let rawData = [];
@@ -234,7 +234,7 @@
                 console.log(d.title); 
                 console.log(d.rank); 
             });
-            
+
             const chartArea = svg.select(".chart-area");
             chartArea.selectAll("*").remove(); // Clear previous content
 
