@@ -259,7 +259,39 @@
                 .domain([1, 10])
                 .range([0, chartHeight]);
 
-            const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+            const colorScale = d3.scaleOrdinal()
+            .domain(['Movie', 'TV Show', 'Unknown'])
+            .range(['#e50914', '#00d4ff', '#999999']);
+
+            const legend = chartArea.append("g")
+                .attr("class", "legend")
+                .attr("transform", `translate(${chartWidth - 150}, 20)`);
+
+            const legendData = [
+                { type: 'Movie', color: '#e50914' },
+                { type: 'TV Show', color: '#00d4ff' },
+                { type: 'Unknown', color: '#999999' }
+            ];
+
+            const legendItems = legend.selectAll(".legend-item")
+                .data(legendData)
+                .enter()
+                .append("g")
+                .attr("class", "legend-item")
+                .attr("transform", (d, i) => `translate(0, ${i * 20})`);
+
+            legendItems.append("rect")
+                .attr("width", 12)
+                .attr("height", 12)
+                .attr("fill", d => d.color);
+
+            legendItems.append("text")
+                .attr("x", 18)
+                .attr("y", 6)
+                .attr("dy", "0.35em")
+                .style("fill", "#fff")
+                .style("font-size", "12px")
+                .text(d => d.type);
 
             // Add ranking labels (1-10)
             chartArea.selectAll(".rank-label")
@@ -458,7 +490,7 @@
                 .attr("y", 2)
                 .attr("height", chartHeight / 10 - 4)
                 .attr("width", 0) // Start with 0 width for smooth entry
-                .attr("fill", d => colorScale(d.title))
+                .attr("fill", d => colorScale(d.type))
                 .attr("opacity", 0.8)
                 .transition()
                 .duration(300)
@@ -520,7 +552,7 @@
             showUpdate.select(".show-bar")
                 .transition()
                 .duration(animationState.isPlaying ? animationState.speed * 0.4 : 0)
-                .attr("fill", d => colorScale(d.title));
+                .attr("fill", d => colorScale(d.type));
 
             // Handle exiting shows (fade out)
             shows.exit()
@@ -646,8 +678,15 @@
                 .duration(200)
                 .style("opacity", .9);
             
-            tooltip.html(`<strong>${title}</strong><br/>
-                         Click to explore in detail`)
+            const tooltipContent = data.isPlaceholder ? 
+                `<strong>No data</strong>` :
+                `<strong>${title}</strong><br/>
+                 Rank: #${data.rank}<br/>
+                 Type: ${data.type}<br/>
+                 Date: ${d3.timeFormat("%B %e, %Y")(data.date)}<br/>
+                 <em>Click to explore in detail</em>`;
+            
+            tooltip.html(tooltipContent)
                 .style("left", (event.pageX + 10) + "px")
                 .style("top", (event.pageY - 28) + "px");
         }
