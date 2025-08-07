@@ -426,97 +426,136 @@
 
             const chartArea = svg.select(".chart-area");
             
-            // Bind data to ranking rows
-            const rows = chartArea.selectAll(".ranking-row")
-                .data(currentData, d => d.rank);
+            // First, draw static ranking background stripes if not already drawn
+            if (chartArea.selectAll(".rank-bg").empty()) {
+                chartArea.selectAll(".rank-bg")
+                    .data([1,2,3,4,5,6,7,8,9,10])
+                    .enter()
+                    .append("rect")
+                    .attr("class", "rank-bg")
+                    .attr("x", 0)
+                    .attr("y", d => yScale(d))
+                    .attr("width", chartWidth)
+                    .attr("height", chartHeight / 10 - 2)
+                    .attr("fill", (d, i) => i % 2 === 0 ? "#2a2a2a" : "#1f1f1f")
+                    .attr("opacity", 0.3);
+            }
+            
+            // Bind data to show elements using title as key for continuity
+            const shows = chartArea.selectAll(".show-element")
+                .data(currentData.filter(d => !d.isPlaceholder), d => d.title);
 
-            // Enter new rows
-            const rowEnter = rows.enter()
+            // Enter new shows
+            const showEnter = shows.enter()
                 .append("g")
-                .attr("class", "ranking-row");
+                .attr("class", "show-element")
+                .attr("transform", d => `translate(0, ${yScale(d.rank)})`);
 
-            // Add ranking background bars
-            rowEnter.append("rect")
-                .attr("class", "rank-bg")
+            // Add colored bars for new shows
+            showEnter.append("rect")
+                .attr("class", "show-bar")
                 .attr("x", 0)
-                .attr("width", chartWidth)
-                .attr("height", chartHeight / 10 - 2)
-                .attr("fill", (d, i) => i % 2 === 0 ? "#2a2a2a" : "#1f1f1f")
-                .attr("opacity", 0.3);
-
-            // Add colored ranking bars
-            rowEnter.append("rect")
-                .attr("class", "rank-bar")
-                .attr("x", 0)
+                .attr("y", 2)
                 .attr("height", chartHeight / 10 - 4)
-                .attr("fill", d => d.isPlaceholder ? "#444" : colorScale(d.title))
-                .attr("opacity", d => d.isPlaceholder ? 0.2 : 0.8);
+                .attr("width", 0) // Start with 0 width for smooth entry
+                .attr("fill", d => colorScale(d.title))
+                .attr("opacity", 0.8)
+                .transition()
+                .duration(300)
+                .attr("width", Math.max(100, chartWidth * 0.7));
 
-            // Add title text
-            rowEnter.append("text")
-                .attr("class", "title-text")
+            // Add title text for new shows
+            showEnter.append("text")
+                .attr("class", "show-title")
                 .attr("x", 10)
+                .attr("y", (chartHeight / 10) / 2)
                 .attr("dy", "0.35em")
                 .style("fill", "white")
                 .style("font-size", "14px")
-                .style("font-weight", "bold");
+                .style("font-weight", "bold")
+                .style("opacity", 0)
+                .text(d => d.title.length > 30 ? d.title.substring(0, 30) + "..." : d.title)
+                .transition()
+                .duration(300)
+                .style("opacity", 1);
 
-            // Add rank number
-            rowEnter.append("text")
-                .attr("class", "rank-text")
+            // Add rank number for new shows
+            showEnter.append("text")
+                .attr("class", "show-rank")
                 .attr("x", chartWidth - 10)
+                .attr("y", (chartHeight / 10) / 2)
                 .attr("text-anchor", "end")
                 .attr("dy", "0.35em")
                 .style("fill", "#999")
-                .style("font-size", "12px");
+                .style("font-size", "12px")
+                .style("opacity", 0)
+                .text(d => `#${d.rank}`)
+                .transition()
+                .duration(300)
+                .style("opacity", 1);
 
-            // Merge enter and update selections
-            const rowUpdate = rowEnter.merge(rows);
+            // Update existing shows - this is the key part for movement
+            const showUpdate = showEnter.merge(shows);
 
-            // Animate position based on rank
-            rowUpdate.transition()
+            // Animate position changes - this creates the racing effect
+            showUpdate.transition()
                 .duration(animationState.isPlaying ? animationState.speed * 0.8 : 0)
+                .ease(d3.easeLinear)
                 .attr("transform", d => `translate(0, ${yScale(d.rank)})`);
 
-            // Update bars
-            rowUpdate.select(".rank-bar")
+            // Update rank text
+            showUpdate.select(".show-rank")
                 .transition()
-                .duration(animationState.isPlaying ? animationState.speed * 0.8 : 0)
-                .attr("width", d => d.isPlaceholder ? 0 : Math.max(100, chartWidth * 0.7))
-                .attr("fill", d => d.isPlaceholder ? "#444" : colorScale(d.title));
+                .duration(animationState.isPlaying ? animationState.speed * 0.4 : 0)
+                .tween("text", function(d) {
+                    const currentText = d3.select(this).text();
+                    const currentRank = parseInt(currentText.replace('#', '')) || d.rank;
+                    const interpolate = d3.interpolateNumber(currentRank, d.rank);
+                    return function(t) {
+                        d3.select(this).text(`#${Math.round(interpolate(t))}`);
+                    };
+                });
 
-            // Update text
-            rowUpdate.select(".title-text")
-                .text(d => d.isPlaceholder ? "" : 
-                      d.title.length > 30 ? d.title.substring(0, 30) + "..." : d.title)
-                .attr("y", (chartHeight / 10) / 2);
+            // Update bar colors (in case show changes)
+            showUpdate.select(".show-bar")
+                .transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.4 : 0)
+                .attr("fill", d => colorScale(d.title));
 
-            rowUpdate.select(".rank-text")
-                .text(d => d.isPlaceholder ? "" : `#${d.rank}`)
-                .attr("y", (chartHeight / 10) / 2);
+            // Handle exiting shows (fade out)
+            shows.exit()
+                .transition()
+                .duration(300)
+                .style("opacity", 0)
+                .remove();
 
-            // Remove old rows
-            rows.exit().remove();
-
-            // Add click interaction for drill down
-            rowUpdate.style("cursor", "pointer")
+            // Add interaction to show elements
+            showUpdate
+                .style("cursor", "pointer")
                 .on("click", function(event, d) {
-                    if (!d.isPlaceholder) {
-                        pauseAnimation();
-                        drillDown(d.title, [d]);
-                    }
+                    pauseAnimation();
+                    drillDown(d.title, [d]);
                 })
                 .on("mouseover", function(event, d) {
-                    if (!d.isPlaceholder) {
-                        d3.select(this).select(".rank-bar").attr("opacity", 1);
-                        showTooltip(event, d.title, d);
-                    }
+                    // Highlight effect
+                    d3.select(this).select(".show-bar")
+                        .transition()
+                        .duration(100)
+                        .attr("opacity", 1)
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 2);
+                    
+                    showTooltip(event, d.title, d);
                 })
                 .on("mouseout", function(event, d) {
-                    if (!d.isPlaceholder) {
-                        d3.select(this).select(".rank-bar").attr("opacity", 0.8);
-                        hideTooltip();
-                    }
+                    // Remove highlight
+                    d3.select(this).select(".show-bar")
+                        .transition()
+                        .duration(100)
+                        .attr("opacity", 0.8)
+                        .attr("stroke", "none");
+                    
+                    hideTooltip();
                 });
         }
 
@@ -577,7 +616,6 @@
                 .style("background-color", !animationState.isPlaying ? "#666" : "#e50914")
                 .property("disabled", !animationState.isPlaying);
         }
-
 
         // Drill down to Level 2
         function drillDown(selectedTitle, data) {
