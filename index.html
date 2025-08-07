@@ -131,7 +131,7 @@
 <body>
     <div class="container">
         <h1>Netflix Top 10 During COVID</h1>
-        <p class="subtitle">Daily Rankings of Movies and TV Shows in the US</p>
+        <p class="subtitle">Daily Rankings of Movies and TV Shows in the US from March 31st, 2020 to March 10th, 2022</p>
         <!-- TODO: change this text -->
         <div class="level-indicator">
             <span id="current-level">Level 1: The Streaming Landscape</span>
@@ -221,19 +221,24 @@
                 title: d["Title"],
                 rank: +d["Rank"],
                 type: d["Type"],
-                releaseDate: d["Netflix Release Date"],
+                releaseDate: d3.timeParse("%b %e, %Y")(d["Netflix Release Date"]),
             })); 
         }
 
         // Level 1: Overview visualization
+        let animationState = {
+            isPlaying: false,
+            currentDateIndex: 0,
+            interval: null,
+            speed: 200, // milliseconds per frame
+            uniqueDates: [],
+            dateData: new Map()
+        };
+
+        // Level 1: Animated Bump Chart visualization
         function drawLevel1() {
             updateLevelIndicator(1, "Level 1: The Streaming Landscape");
-            updateChartTitle("All Top 10 Content Over Time");
-            processedData.forEach(d => {
-                console.log(d.date);  
-                console.log(d.title); 
-                console.log(d.rank); 
-            });
+            updateChartTitle("Animated Top 10 Rankings Over Time");
 
             const chartArea = svg.select(".chart-area");
             chartArea.selectAll("*").remove(); // Clear previous content
@@ -243,90 +248,336 @@
                 return;
             }
 
-            // Create a simple line chart showing content rankings over time
-            // Group data by title for multiple lines
-            const titleData = d3.group(processedData, d => d.title);
+            // Prepare data for animation
+            prepareAnimationData();
             
             // Set up scales
-            const xScale = d3.scaleTime()
-                .domain(d3.extent(processedData, d => d.date))
-                .range([0, config.width - config.margin.left - config.margin.right]);
-
+            const chartWidth = config.width - config.margin.left - config.margin.right;
+            const chartHeight = config.height - config.margin.top - config.margin.bottom;
+            
             const yScale = d3.scaleLinear()
-                .domain([10, 1]) // Reverse scale (rank 1 at top)
-                .range([config.height - config.margin.top - config.margin.bottom, 0]);
+                .domain([1, 10])
+                .range([0, chartHeight]);
 
             const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
-            // Add axes
-            chartArea.append("g")
-                .attr("class", "axis")
-                .attr("transform", `translate(0, ${config.height - config.margin.top - config.margin.bottom})`)
-                .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat("%b %Y")));
+            // Add ranking labels (1-10)
+            chartArea.selectAll(".rank-label")
+                .data([1,2,3,4,5,6,7,8,9,10])
+                .enter()
+                .append("text")
+                .attr("class", "rank-label")
+                .attr("x", -10)
+                .attr("y", d => yScale(d) + 5)
+                .attr("text-anchor", "end")
+                .style("fill", "#999")
+                .style("font-size", "12px")
+                .text(d => d);
 
-            chartArea.append("g")
-                .attr("class", "axis")
-                .call(d3.axisLeft(yScale));
-
-            // Add axis labels
+            // Add title "Rank" label
             chartArea.append("text")
                 .attr("class", "axis-label")
                 .attr("transform", "rotate(-90)")
-                .attr("y", 0 - config.margin.left)
-                .attr("x", 0 - (config.height - config.margin.top - config.margin.bottom) / 2)
+                .attr("y", 0 - config.margin.left + 20)
+                .attr("x", 0 - chartHeight / 2)
                 .attr("dy", "1em")
                 .style("text-anchor", "middle")
-                .text("Ranking (1 = Top)");
+                .style("fill", "#fff")
+                .text("Rank");
 
-            chartArea.append("text")
-                .attr("class", "axis-label")
-                .attr("transform", `translate(${(config.width - config.margin.left - config.margin.right) / 2}, ${config.height - config.margin.top - config.margin.bottom + 50})`)
-                .style("text-anchor", "middle")
-                .text("Date");
-
-            // Line generator
-            const line = d3.line()
-                .x(d => xScale(d.date))
-                .y(d => yScale(d.rank))
-                .curve(d3.curveMonotoneX);
-
-            // Draw lines for top titles (limit to prevent overcrowding)
-            let titleCount = 0;
-            titleData.forEach((values, title) => {
-                if (titleCount >= 10) return; // Limit to top 10 most frequent titles
-                
-                chartArea.append("path")
-                    .datum(values.sort((a, b) => a.date - b.date))
-                    .attr("class", "title-line")
-                    .attr("fill", "none")
-                    .attr("stroke", colorScale(title))
-                    .attr("stroke-width", 2)
-                    .attr("d", line)
-                    .style("opacity", 0.7)
-                    .on("mouseover", function(event, d) {
-                        d3.select(this).style("opacity", 1).attr("stroke-width", 3);
-                        showTooltip(event, title, d);
-                    })
-                    .on("mouseout", function(event, d) {
-                        d3.select(this).style("opacity", 0.7).attr("stroke-width", 2);
-                        hideTooltip();
-                    })
-                    .on("click", function(event, d) {
-                        drillDown(title, d);
-                    });
-                
-                titleCount++;
-            });
-
-            // Add instruction text
-            chartArea.append("text")
-                .attr("x", (config.width - config.margin.left - config.margin.right) / 2)
-                .attr("y", -20)
-                .attr("text-anchor", "middle")
-                .style("fill", "#999")
-                .style("font-size", "14px")
-                .text("Click on a line to drill down into specific content");
+            // Create animation controls
+            createAnimationControls();
+            
+            // Draw initial frame
+            drawBumpChartFrame(0, yScale, colorScale, chartWidth, chartHeight);
         }
+
+        function prepareAnimationData() {
+            // Get unique dates sorted
+            animationState.uniqueDates = [...new Set(processedData.map(d => d.date))]
+                .sort((a, b) => a - b);
+
+            // Group data by date
+            animationState.dateData = d3.group(processedData, d => d.date.getTime());
+            
+            // Fill in missing rankings for smooth animation
+            animationState.uniqueDates.forEach(date => {
+                const dateKey = date.getTime();
+                const dayData = animationState.dateData.get(dateKey) || [];
+                
+                // Ensure we have exactly 10 entries for each date
+                const rankedData = [];
+                for (let rank = 1; rank <= 10; rank++) {
+                    const entry = dayData.find(d => d.rank === rank);
+                    if (entry) {
+                        rankedData.push(entry);
+                    } else {
+                        // Fill with placeholder if no show at this rank
+                        rankedData.push({
+                            date: date,
+                            title: `Rank ${rank}`,
+                            rank: rank,
+                            isPlaceholder: true
+                        });
+                    }
+                }
+                animationState.dateData.set(dateKey, rankedData);
+            });
+        }
+
+        function createAnimationControls() {
+            // Remove existing controls
+            d3.select("#animation-controls").remove();
+            
+            // Add animation controls before the chart
+            const controlsDiv = d3.select("#visualization")
+                .insert("div", "svg")
+                .attr("id", "animation-controls")
+                .style("text-align", "center")
+                .style("margin-bottom", "20px");
+
+            // Current date display
+            controlsDiv.append("div")
+                .attr("id", "current-date")
+                .style("font-size", "18px")
+                .style("color", "#e50914")
+                .style("margin-bottom", "10px")
+                .text("March 2020");
+
+            // Control buttons
+            const buttonGroup = controlsDiv.append("div")
+                .attr("id", "button-group");
+
+            buttonGroup.append("button")
+                .attr("id", "play-btn")
+                .attr("class", "control-button")
+                .style("background-color", "#e50914")
+                .style("color", "white")
+                .style("border", "none")
+                .style("padding", "8px 16px")
+                .style("margin", "0 5px")
+                .style("border-radius", "4px")
+                .style("cursor", "pointer")
+                .text("▶ Play")
+                .on("click", playAnimation);
+
+            buttonGroup.append("button")
+                .attr("id", "pause-btn")
+                .attr("class", "control-button")
+                .style("background-color", "#666")
+                .style("color", "white")
+                .style("border", "none")
+                .style("padding", "8px 16px")
+                .style("margin", "0 5px")
+                .style("border-radius", "4px")
+                .style("cursor", "pointer")
+                .text("⏸ Pause")
+                .on("click", pauseAnimation);
+
+            buttonGroup.append("button")
+                .attr("id", "stop-btn")
+                .attr("class", "control-button")
+                .style("background-color", "#666")
+                .style("color", "white")
+                .style("border", "none")
+                .style("padding", "8px 16px")
+                .style("margin", "0 5px")
+                .style("border-radius", "4px")
+                .style("cursor", "pointer")
+                .text("⏹ Stop")
+                .on("click", stopAnimation);
+
+            buttonGroup.append("button")
+                .attr("id", "reset-btn-anim")
+                .attr("class", "control-button")
+                .style("background-color", "#666")
+                .style("color", "white")
+                .style("border", "none")
+                .style("padding", "8px 16px")
+                .style("margin", "0 5px")
+                .style("border-radius", "4px")
+                .style("cursor", "pointer")
+                .text("⏮ Reset")
+                .on("click", resetAnimation);
+
+            // Speed control
+            controlsDiv.append("div")
+                .style("margin-top", "10px")
+                .html(`
+                    <label style="color: #999; margin-right: 10px;">Speed:</label>
+                    <input type="range" id="speed-slider" min="50" max="1000" value="200" 
+                           style="margin-right: 10px;">
+                    <span id="speed-display" style="color: #999;">200ms</span>
+                `);
+
+            d3.select("#speed-slider").on("input", function() {
+                animationState.speed = +this.value;
+                d3.select("#speed-display").text(this.value + "ms");
+            });
+        }
+
+        function drawBumpChartFrame(dateIndex, yScale, colorScale, chartWidth, chartHeight) {
+            const currentDate = animationState.uniqueDates[dateIndex];
+            const currentData = animationState.dateData.get(currentDate.getTime()) || [];
+            
+            // Update date display
+            d3.select("#current-date")
+                .text(d3.timeFormat("%B %Y")(currentDate));
+
+            const chartArea = svg.select(".chart-area");
+            
+            // Bind data to ranking rows
+            const rows = chartArea.selectAll(".ranking-row")
+                .data(currentData, d => d.rank);
+
+            // Enter new rows
+            const rowEnter = rows.enter()
+                .append("g")
+                .attr("class", "ranking-row");
+
+            // Add ranking background bars
+            rowEnter.append("rect")
+                .attr("class", "rank-bg")
+                .attr("x", 0)
+                .attr("width", chartWidth)
+                .attr("height", chartHeight / 10 - 2)
+                .attr("fill", (d, i) => i % 2 === 0 ? "#2a2a2a" : "#1f1f1f")
+                .attr("opacity", 0.3);
+
+            // Add colored ranking bars
+            rowEnter.append("rect")
+                .attr("class", "rank-bar")
+                .attr("x", 0)
+                .attr("height", chartHeight / 10 - 4)
+                .attr("fill", d => d.isPlaceholder ? "#444" : colorScale(d.title))
+                .attr("opacity", d => d.isPlaceholder ? 0.2 : 0.8);
+
+            // Add title text
+            rowEnter.append("text")
+                .attr("class", "title-text")
+                .attr("x", 10)
+                .attr("dy", "0.35em")
+                .style("fill", "white")
+                .style("font-size", "14px")
+                .style("font-weight", "bold");
+
+            // Add rank number
+            rowEnter.append("text")
+                .attr("class", "rank-text")
+                .attr("x", chartWidth - 10)
+                .attr("text-anchor", "end")
+                .attr("dy", "0.35em")
+                .style("fill", "#999")
+                .style("font-size", "12px");
+
+            // Merge enter and update selections
+            const rowUpdate = rowEnter.merge(rows);
+
+            // Animate position based on rank
+            rowUpdate.transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.8 : 0)
+                .attr("transform", d => `translate(0, ${yScale(d.rank)})`);
+
+            // Update bars
+            rowUpdate.select(".rank-bar")
+                .transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.8 : 0)
+                .attr("width", d => d.isPlaceholder ? 0 : Math.max(100, chartWidth * 0.7))
+                .attr("fill", d => d.isPlaceholder ? "#444" : colorScale(d.title));
+
+            // Update text
+            rowUpdate.select(".title-text")
+                .text(d => d.isPlaceholder ? "" : 
+                      d.title.length > 30 ? d.title.substring(0, 30) + "..." : d.title)
+                .attr("y", (chartHeight / 10) / 2);
+
+            rowUpdate.select(".rank-text")
+                .text(d => d.isPlaceholder ? "" : `#${d.rank}`)
+                .attr("y", (chartHeight / 10) / 2);
+
+            // Remove old rows
+            rows.exit().remove();
+
+            // Add click interaction for drill down
+            rowUpdate.style("cursor", "pointer")
+                .on("click", function(event, d) {
+                    if (!d.isPlaceholder) {
+                        pauseAnimation();
+                        drillDown(d.title, [d]);
+                    }
+                })
+                .on("mouseover", function(event, d) {
+                    if (!d.isPlaceholder) {
+                        d3.select(this).select(".rank-bar").attr("opacity", 1);
+                        showTooltip(event, d.title, d);
+                    }
+                })
+                .on("mouseout", function(event, d) {
+                    if (!d.isPlaceholder) {
+                        d3.select(this).select(".rank-bar").attr("opacity", 0.8);
+                        hideTooltip();
+                    }
+                });
+        }
+
+        function playAnimation() {
+            if (animationState.isPlaying) return;
+            
+            animationState.isPlaying = true;
+            updateControlButtons();
+            
+            animationState.interval = setInterval(() => {
+                if (animationState.currentDateIndex >= animationState.uniqueDates.length - 1) {
+                    stopAnimation();
+                    return;
+                }
+                
+                animationState.currentDateIndex++;
+                drawBumpChartFrame(
+                    animationState.currentDateIndex,
+                    d3.scaleLinear().domain([1, 10]).range([0, config.height - config.margin.top - config.margin.bottom]),
+                    d3.scaleOrdinal(d3.schemeCategory10),
+                    config.width - config.margin.left - config.margin.right,
+                    config.height - config.margin.top - config.margin.bottom
+                );
+            }, animationState.speed);
+        }
+
+        function pauseAnimation() {
+            animationState.isPlaying = false;
+            if (animationState.interval) {
+                clearInterval(animationState.interval);
+                animationState.interval = null;
+            }
+            updateControlButtons();
+        }
+
+        function stopAnimation() {
+            pauseAnimation();
+            animationState.currentDateIndex = 0;
+            drawBumpChartFrame(
+                0,
+                d3.scaleLinear().domain([1, 10]).range([0, config.height - config.margin.top - config.margin.bottom]),
+                d3.scaleOrdinal(d3.schemeCategory10),
+                config.width - config.margin.left - config.margin.right,
+                config.height - config.margin.top - config.margin.bottom
+            );
+        }
+
+        function resetAnimation() {
+            stopAnimation();
+        }
+
+        function updateControlButtons() {
+            d3.select("#play-btn")
+                .style("background-color", animationState.isPlaying ? "#666" : "#e50914")
+                .property("disabled", animationState.isPlaying);
+            
+            d3.select("#pause-btn")
+                .style("background-color", !animationState.isPlaying ? "#666" : "#e50914")
+                .property("disabled", !animationState.isPlaying);
+        }
+
 
         // Drill down to Level 2
         function drillDown(selectedTitle, data) {
