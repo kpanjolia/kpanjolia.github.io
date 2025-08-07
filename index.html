@@ -230,7 +230,7 @@
             isPlaying: false,
             currentDateIndex: 0,
             interval: null,
-            speed: 200, // milliseconds per frame
+            speed: 50, // milliseconds per frame
             uniqueDates: [],
             dateData: new Map()
         };
@@ -431,21 +431,6 @@
                 .style("cursor", "pointer")
                 .text("⏮ Reset")
                 .on("click", resetAnimation);
-
-            // Speed control
-            controlsDiv.append("div")
-                .style("margin-top", "10px")
-                .html(`
-                    <label style="color: #999; margin-right: 10px;">Speed:</label>
-                    <input type="range" id="speed-slider" min="50" max="1000" value="200" 
-                           style="margin-right: 10px;">
-                    <span id="speed-display" style="color: #999;">200ms</span>
-                `);
-
-            d3.select("#speed-slider").on("input", function() {
-                animationState.speed = +this.value;
-                d3.select("#speed-display").text(this.value + "ms");
-            });
         }
 
         function drawBumpChartFrame(dateIndex, yScale, colorScale, chartWidth, chartHeight) {
@@ -652,24 +637,368 @@
         // Drill down to Level 2
         function drillDown(selectedTitle, data) {
             currentLevel = 2;
-            updateLevelIndicator(2, `Level 2: Focus on "${selectedTitle}"`);
-            updateChartTitle(`Detailed Analysis: ${selectedTitle}`);
+            updateLevelIndicator(2, "Level 2: Top 10 Most Persistent Shows");
+            updateChartTitle("Shows with Most Days in Netflix Top 10");
             
-            // Implement Level 2 visualization here
-            // This would show more detailed analysis of the selected content
-            const chartArea = svg.select(".chart-area");
-            chartArea.selectAll("*").remove();
-            
-            // Placeholder for Level 2 content
-            chartArea.append("text")
-                .attr("x", (config.width - config.margin.left - config.margin.right) / 2)
-                .attr("y", (config.height - config.margin.top - config.margin.bottom) / 2)
-                .attr("text-anchor", "middle")
-                .style("fill", "#999")
-                .style("font-size", "18px")
-                .text(`Level 2: Detailed view of "${selectedTitle}" coming soon...`);
-                
+            drawLevel2();
             updateNavButtons();
+        }
+
+        function drawLevel2() {
+            updateLevelIndicator(2, "Level 2: Top 10 Most Persistent Shows");
+            updateChartTitle("Hall of Fame: Most Days in Netflix Top 10");
+
+            const chartArea = svg.select(".chart-area");
+            chartArea.selectAll("*").remove(); // Clear previous content
+
+            if (processedData.length === 0) {
+                showError("No valid data to display");
+                return;
+            }
+
+            // Calculate days in top 10 for each show
+            const showStats = calculateShowPersistence();
+            
+            // Get top 10 most persistent shows
+            const top10Shows = showStats
+                .sort((a, b) => b.daysInTop10 - a.daysInTop10)
+                .slice(0, 10);
+
+            console.log("Top 10 Most Persistent Shows:", top10Shows);
+
+            // Filter data to only include these top 10 shows
+            const filteredData = processedData.filter(d => 
+                top10Shows.some(show => show.title === d.title)
+            );
+
+            // Prepare animation data for Level 2
+            prepareLevel2AnimationData(filteredData, top10Shows);
+            
+            // Set up scales
+            const chartWidth = config.width - config.margin.left - config.margin.right;
+            const chartHeight = config.height - config.margin.top - config.margin.bottom;
+            
+            const yScale = d3.scaleLinear()
+                .domain([1, 10])
+                .range([0, chartHeight]);
+
+            // Create color scale based on content type
+            const colorScale = d3.scaleOrdinal()
+                .domain(['Movie', 'TV Show', 'Unknown'])
+                .range(['#e50914', '#00d4ff', '#999999']);
+
+            // Add legend and stats
+            addLevel2Legend(chartArea, chartWidth, top10Shows, colorScale);
+
+            // Add ranking labels (1-10)
+            chartArea.selectAll(".rank-label")
+                .data([1,2,3,4,5,6,7,8,9,10])
+                .enter()
+                .append("text")
+                .attr("class", "rank-label")
+                .attr("x", -10)
+                .attr("y", d => yScale(d) + 5)
+                .attr("text-anchor", "end")
+                .style("fill", "#999")
+                .style("font-size", "12px")
+                .text(d => d);
+
+            // Add title "Rank" label
+            chartArea.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - config.margin.left + 20)
+                .attr("x", 0 - chartHeight / 2)
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("fill", "#fff")
+                .text("Rank");
+
+            // Reset animation state for Level 2
+            animationState.currentDateIndex = 0;
+            animationState.isPlaying = false;
+            
+            // Create animation controls (reuse existing)
+            d3.select("#animation-controls").remove();
+            createAnimationControls();
+            
+            // Draw initial frame
+            drawLevel2BumpChartFrame(0, yScale, colorScale, chartWidth, chartHeight);
+        }
+
+        // Calculate show persistence statistics
+        function calculateShowPersistence() {
+            const showCounts = new Map();
+            
+            processedData.forEach(d => {
+                if (!showCounts.has(d.title)) {
+                    showCounts.set(d.title, {
+                        title: d.title,
+                        type: d.type,
+                        category: d.category,
+                        daysInTop10: 0,
+                        appearances: [],
+                        bestRank: 10,
+                        averageRank: 0
+                    });
+                }
+                
+                const show = showCounts.get(d.title);
+                show.daysInTop10++;
+                show.appearances.push({
+                    date: d.date,
+                    rank: d.rank
+                });
+                show.bestRank = Math.min(show.bestRank, d.rank);
+            });
+
+            // Calculate average ranks
+            showCounts.forEach(show => {
+                const totalRank = show.appearances.reduce((sum, app) => sum + app.rank, 0);
+                show.averageRank = Math.round(totalRank / show.appearances.length * 10) / 10;
+            });
+
+            return Array.from(showCounts.values());
+        }
+
+        // Prepare animation data specifically for Level 2
+        function prepareLevel2AnimationData(filteredData, top10Shows) {
+            // Get unique dates sorted
+            animationState.uniqueDates = [...new Set(filteredData.map(d => d.date))]
+                .sort((a, b) => a - b);
+
+            // Group filtered data by date
+            animationState.dateData = d3.group(filteredData, d => d.date.getTime());
+            
+            // For Level 2, we only show data when the top 10 persistent shows appear
+            // No need to fill missing rankings since we're only tracking specific shows
+        }
+
+        // Add legend with persistence stats
+        function addLevel2Legend(chartArea, chartWidth, top10Shows, colorScale) {
+            const legend = chartArea.append("g")
+                .attr("class", "level2-legend")
+                .attr("transform", `translate(${chartWidth - 200}, 20)`);
+
+            // Title for legend
+            legend.append("text")
+                .attr("x", 0)
+                .attr("y", -10)
+                .style("fill", "#e50914")
+                .style("font-size", "14px")
+                .style("font-weight", "bold")
+                .text("Hall of Fame Stats");
+
+            // Show top 3 most persistent with stats
+            const topShows = legend.selectAll(".top-show")
+                .data(top10Shows.slice(0, 3))
+                .enter()
+                .append("g")
+                .attr("class", "top-show")
+                .attr("transform", (d, i) => `translate(0, ${i * 40 + 10})`);
+
+            // Color indicator
+            topShows.append("rect")
+                .attr("width", 12)
+                .attr("height", 12)
+                .attr("fill", d => colorScale(d.type));
+
+            // Show name
+            topShows.append("text")
+                .attr("x", 18)
+                .attr("y", 6)
+                .attr("dy", "0.35em")
+                .style("fill", "#fff")
+                .style("font-size", "11px")
+                .style("font-weight", "bold")
+                .text(d => d.title.length > 15 ? d.title.substring(0, 15) + "..." : d.title);
+
+            // Stats
+            topShows.append("text")
+                .attr("x", 18)
+                .attr("y", 18)
+                .attr("dy", "0.35em")
+                .style("fill", "#999")
+                .style("font-size", "9px")
+                .text(d => `${d.daysInTop10} days, best: #${d.bestRank}`);
+        }
+
+        // Draw Level 2 bump chart frame
+        function drawLevel2BumpChartFrame(dateIndex, yScale, colorScale, chartWidth, chartHeight) {
+            if (dateIndex >= animationState.uniqueDates.length) {
+                return;
+            }
+
+            const currentDate = animationState.uniqueDates[dateIndex];
+            const currentData = animationState.dateData.get(currentDate.getTime()) || [];
+            
+            // Update date display
+            d3.select("#current-date")
+                .text(d3.timeFormat("%B %Y")(currentDate));
+
+            const chartArea = svg.select(".chart-area");
+            
+            // First, draw static ranking background stripes if not already drawn
+            if (chartArea.selectAll(".rank-bg").empty()) {
+                chartArea.selectAll(".rank-bg")
+                    .data([1,2,3,4,5,6,7,8,9,10])
+                    .enter()
+                    .append("rect")
+                    .attr("class", "rank-bg")
+                    .attr("x", 0)
+                    .attr("y", d => yScale(d))
+                    .attr("width", chartWidth)
+                    .attr("height", chartHeight / 10 - 2)
+                    .attr("fill", (d, i) => i % 2 === 0 ? "#2a2a2a" : "#1f1f1f")
+                    .attr("opacity", 0.3);
+            }
+            
+            // Bind data to show elements using title as key for continuity
+            const shows = chartArea.selectAll(".show-element")
+                .data(currentData, d => d.title);
+
+            // Enter new shows
+            const showEnter = shows.enter()
+                .append("g")
+                .attr("class", "show-element")
+                .attr("transform", d => `translate(0, ${yScale(d.rank)})`);
+
+            // Add colored bars for new shows
+            showEnter.append("rect")
+                .attr("class", "show-bar")
+                .attr("x", 0)
+                .attr("y", 2)
+                .attr("height", chartHeight / 10 - 4)
+                .attr("width", 0) // Start with 0 width for smooth entry
+                .attr("fill", d => colorScale(d.type))
+                .attr("opacity", 0.8)
+                .transition()
+                .duration(300)
+                .attr("width", Math.max(100, chartWidth * 0.7));
+
+            // Add title text for new shows
+            showEnter.append("text")
+                .attr("class", "show-title")
+                .attr("x", 10)
+                .attr("y", (chartHeight / 10) / 2)
+                .attr("dy", "0.35em")
+                .style("fill", "white")
+                .style("font-size", "14px")
+                .style("font-weight", "bold")
+                .style("opacity", 0)
+                .text(d => d.title.length > 30 ? d.title.substring(0, 30) + "..." : d.title)
+                .transition()
+                .duration(300)
+                .style("opacity", 1);
+
+            // Add rank number for new shows
+            showEnter.append("text")
+                .attr("class", "show-rank")
+                .attr("x", chartWidth - 10)
+                .attr("y", (chartHeight / 10) / 2)
+                .attr("text-anchor", "end")
+                .attr("dy", "0.35em")
+                .style("fill", "#999")
+                .style("font-size", "12px")
+                .style("opacity", 0)
+                .text(d => `#${d.rank}`)
+                .transition()
+                .duration(300)
+                .style("opacity", 1);
+
+            // Update existing shows - this is the key part for movement
+            const showUpdate = showEnter.merge(shows);
+
+            // Animate position changes - this creates the racing effect
+            showUpdate.transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.8 : 0)
+                .ease(d3.easeLinear)
+                .attr("transform", d => `translate(0, ${yScale(d.rank)})`);
+
+            // Update rank text
+            showUpdate.select(".show-rank")
+                .transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.4 : 0)
+                .tween("text", function(d) {
+                    const currentText = d3.select(this).text();
+                    const currentRank = parseInt(currentText.replace('#', '')) || d.rank;
+                    const interpolate = d3.interpolateNumber(currentRank, d.rank);
+                    return function(t) {
+                        d3.select(this).text(`#${Math.round(interpolate(t))}`);
+                    };
+                });
+
+            // Update bar colors (in case show changes)
+            showUpdate.select(".show-bar")
+                .transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.4 : 0)
+                .attr("fill", d => colorScale(d.type));
+
+            // Handle exiting shows (fade out)
+            shows.exit()
+                .transition()
+                .duration(300)
+                .style("opacity", 0)
+                .remove();
+
+            // Add interaction to show elements
+            showUpdate
+                .style("cursor", "pointer")
+                .on("click", function(event, d) {
+                    pauseAnimation();
+                    // Could drill down to Level 3 here
+                    console.log("Clicked on persistent show:", d.title);
+                })
+                .on("mouseover", function(event, d) {
+                    // Highlight effect
+                    d3.select(this).select(".show-bar")
+                        .transition()
+                        .duration(100)
+                        .attr("opacity", 1)
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 2);
+                    
+                    showLevel2Tooltip(event, d);
+                })
+                .on("mouseout", function(event, d) {
+                    // Remove highlight
+                    d3.select(this).select(".show-bar")
+                        .transition()
+                        .duration(100)
+                        .attr("opacity", 0.8)
+                        .attr("stroke", "none");
+                    
+                    hideTooltip();
+                });
+        }
+
+        // Enhanced tooltip for Level 2 with persistence stats
+        function showLevel2Tooltip(event, data) {
+            // Find the show's persistence stats
+            const showStats = calculateShowPersistence();
+            const showStat = showStats.find(s => s.title === data.title);
+            
+            tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+            
+            const tooltipContent = showStat ? 
+                `<strong>${data.title}</strong><br/>
+                 Current Rank: #${data.rank}<br/>
+                 Type: ${data.type}<br/>
+                 <strong>Persistence Stats:</strong><br/>
+                 Total days in top 10: ${showStat.daysInTop10}<br/>
+                 Best rank achieved: #${showStat.bestRank}<br/>
+                 Average rank: ${showStat.averageRank}<br/>
+                 Date: ${d3.timeFormat("%B %d, %Y")(data.date)}` :
+                `<strong>${data.title}</strong><br/>
+                 Rank: #${data.rank}<br/>
+                 Type: ${data.type}<br/>
+                 Date: ${d3.timeFormat("%B %d, %Y")(data.date)}`;
+            
+            tooltip.html(tooltipContent)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
         }
 
         // Utility functions
