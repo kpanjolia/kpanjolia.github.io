@@ -656,6 +656,9 @@
             const chartArea = svg.select(".chart-area");
             chartArea.selectAll("*").remove(); // Clear previous content
 
+            // Remove animation controls for Level 2
+            d3.select("#animation-controls").remove();
+
             if (processedData.length === 0) {
                 showError("No valid data to display");
                 return;
@@ -671,64 +674,122 @@
 
             console.log("Top 10 Most Persistent Shows:", top10Shows);
 
-            // Filter data to only include these top 10 shows
-            const filteredData = processedData.filter(d => 
-                top10Shows.some(show => show.title === d.title)
-            );
-
-            // Prepare animation data for Level 2
-            prepareLevel2AnimationData(filteredData, top10Shows);
-            
             // Set up scales
             const chartWidth = config.width - config.margin.left - config.margin.right;
             const chartHeight = config.height - config.margin.top - config.margin.bottom;
             
-            const yScale = d3.scaleLinear()
-                .domain([1, 10])
-                .range([0, chartHeight]);
+            // Create a bar chart showing persistence stats
+            const xScale = d3.scaleLinear()
+                .domain([0, d3.max(top10Shows, d => d.daysInTop10)])
+                .range([0, chartWidth * 0.6]);
+
+            const yScale = d3.scaleBand()
+                .domain(top10Shows.map(d => d.title))
+                .range([0, chartHeight])
+                .padding(0.1);
 
             // Create color scale based on content type
             const colorScale = d3.scaleOrdinal()
                 .domain(['Movie', 'TV Show', 'Unknown'])
                 .range(['#e50914', '#00d4ff', '#999999']);
 
-            // Add legend and stats
+            // Add legend
             addLevel2Legend(chartArea, chartWidth, top10Shows, colorScale);
 
-            // Add ranking labels (1-10)
-            chartArea.selectAll(".rank-label")
-                .data([1,2,3,4,5,6,7,8,9,10])
+            // Add X axis
+            chartArea.append("g")
+                .attr("class", "x-axis")
+                .attr("transform", `translate(0, ${chartHeight})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("fill", "#ccc");
+
+            // Add Y axis labels
+            chartArea.append("g")
+                .attr("class", "y-axis")
+                .selectAll(".y-label")
+                .data(top10Shows)
                 .enter()
                 .append("text")
-                .attr("class", "rank-label")
+                .attr("class", "y-label")
                 .attr("x", -10)
-                .attr("y", d => yScale(d) + 5)
+                .attr("y", d => yScale(d.title) + yScale.bandwidth() / 2)
+                .attr("dy", "0.35em")
                 .attr("text-anchor", "end")
-                .style("fill", "#999")
+                .style("fill", "#fff")
                 .style("font-size", "12px")
-                .text(d => d);
+                .text(d => d.title.length > 20 ? d.title.substring(0, 20) + "..." : d.title);
 
-            // Add title "Rank" label
+            // Add bars
+            const bars = chartArea.selectAll(".persistence-bar")
+                .data(top10Shows)
+                .enter()
+                .append("rect")
+                .attr("class", "persistence-bar")
+                .attr("x", 0)
+                .attr("y", d => yScale(d.title))
+                .attr("width", 0)
+                .attr("height", yScale.bandwidth())
+                .attr("fill", d => colorScale(d.type))
+                .attr("opacity", 0.8);
+
+            // Animate bars
+            bars.transition()
+                .duration(1000)
+                .delay((d, i) => i * 100)
+                .attr("width", d => xScale(d.daysInTop10));
+
+            // Add value labels
+            const labels = chartArea.selectAll(".value-label")
+                .data(top10Shows)
+                .enter()
+                .append("text")
+                .attr("class", "value-label")
+                .attr("x", d => xScale(d.daysInTop10) + 10)
+                .attr("y", d => yScale(d.title) + yScale.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .style("fill", "#fff")
+                .style("font-size", "11px")
+                .style("opacity", 0)
+                .text(d => `${d.daysInTop10} days (best: #${d.bestRank})`);
+
+            // Animate labels
+            labels.transition()
+                .duration(1000)
+                .delay((d, i) => i * 100 + 500)
+                .style("opacity", 1);
+
+            // Add axis labels
             chartArea.append("text")
                 .attr("class", "axis-label")
-                .attr("transform", "rotate(-90)")
-                .attr("y", 0 - config.margin.left + 20)
-                .attr("x", 0 - chartHeight / 2)
-                .attr("dy", "1em")
-                .style("text-anchor", "middle")
+                .attr("x", chartWidth / 2)
+                .attr("y", chartHeight + 50)
+                .attr("text-anchor", "middle")
                 .style("fill", "#fff")
-                .text("Rank");
+                .style("font-size", "14px")
+                .text("Days in Top 10");
 
-            // Reset animation state for Level 2
-            animationState.currentDateIndex = 0;
-            animationState.isPlaying = false;
-            
-            // Create animation controls (reuse existing)
-            d3.select("#animation-controls").remove();
-            createAnimationControls();
-            
-            // Draw initial frame
-            drawLevel2BumpChartFrame(0, yScale, colorScale, chartWidth, chartHeight);
+            // Add interactions
+            bars.style("cursor", "pointer")
+                .on("mouseover", function(event, d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(100)
+                        .attr("opacity", 1)
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 2);
+                    
+                    showLevel2BarTooltip(event, d);
+                })
+                .on("mouseout", function(event, d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(100)
+                        .attr("opacity", 0.8)
+                        .attr("stroke", "none");
+                    
+                    hideTooltip();
+                });
         }
 
         // Calculate show persistence statistics
@@ -779,11 +840,11 @@
             // No need to fill missing rankings since we're only tracking specific shows
         }
 
-        // Add legend with persistence stats
+        // Add legend with persistence stats - simplified for bar chart
         function addLevel2Legend(chartArea, chartWidth, top10Shows, colorScale) {
             const legend = chartArea.append("g")
                 .attr("class", "level2-legend")
-                .attr("transform", `translate(${chartWidth - 200}, 20)`);
+                .attr("transform", `translate(${chartWidth - 180}, 20)`);
 
             // Title for legend
             legend.append("text")
@@ -792,40 +853,34 @@
                 .style("fill", "#e50914")
                 .style("font-size", "14px")
                 .style("font-weight", "bold")
-                .text("Hall of Fame Stats");
+                .text("Content Type");
 
-            // Show top 3 most persistent with stats
-            const topShows = legend.selectAll(".top-show")
-                .data(top10Shows.slice(0, 3))
+            // Show legend for content types
+            const legendData = [
+                { type: 'Movie', color: '#e50914' },
+                { type: 'TV Show', color: '#00d4ff' },
+                { type: 'Unknown', color: '#999999' }
+            ];
+
+            const legendItems = legend.selectAll(".legend-item")
+                .data(legendData)
                 .enter()
                 .append("g")
-                .attr("class", "top-show")
-                .attr("transform", (d, i) => `translate(0, ${i * 40 + 10})`);
+                .attr("class", "legend-item")
+                .attr("transform", (d, i) => `translate(0, ${i * 20 + 10})`);
 
-            // Color indicator
-            topShows.append("rect")
+            legendItems.append("rect")
                 .attr("width", 12)
                 .attr("height", 12)
-                .attr("fill", d => colorScale(d.type));
+                .attr("fill", d => d.color);
 
-            // Show name
-            topShows.append("text")
+            legendItems.append("text")
                 .attr("x", 18)
                 .attr("y", 6)
                 .attr("dy", "0.35em")
                 .style("fill", "#fff")
-                .style("font-size", "11px")
-                .style("font-weight", "bold")
-                .text(d => d.title.length > 15 ? d.title.substring(0, 15) + "..." : d.title);
-
-            // Stats
-            topShows.append("text")
-                .attr("x", 18)
-                .attr("y", 18)
-                .attr("dy", "0.35em")
-                .style("fill", "#999")
-                .style("font-size", "9px")
-                .text(d => `${d.daysInTop10} days, best: #${d.bestRank}`);
+                .style("font-size", "12px")
+                .text(d => d.type);
         }
 
         // Draw Level 2 bump chart frame
@@ -977,29 +1032,19 @@
                 });
         }
 
-        // Enhanced tooltip for Level 2 with persistence stats
-        function showLevel2Tooltip(event, data) {
-            // Find the show's persistence stats
-            const showStats = calculateShowPersistence();
-            const showStat = showStats.find(s => s.title === data.title);
-            
+        // Enhanced tooltip for Level 2 bar chart
+        function showLevel2BarTooltip(event, data) {
             tooltip.transition()
                 .duration(200)
                 .style("opacity", .9);
             
-            const tooltipContent = showStat ? 
+            const tooltipContent = 
                 `<strong>${data.title}</strong><br/>
-                 Current Rank: #${data.rank}<br/>
                  Type: ${data.type}<br/>
                  <strong>Persistence Stats:</strong><br/>
-                 Total days in top 10: ${showStat.daysInTop10}<br/>
-                 Best rank achieved: #${showStat.bestRank}<br/>
-                 Average rank: ${showStat.averageRank}<br/>
-                 Date: ${d3.timeFormat("%B %d, %Y")(data.date)}` :
-                `<strong>${data.title}</strong><br/>
-                 Rank: #${data.rank}<br/>
-                 Type: ${data.type}<br/>
-                 Date: ${d3.timeFormat("%B %d, %Y")(data.date)}`;
+                 Total days in top 10: ${data.daysInTop10}<br/>
+                 Best rank achieved: #${data.bestRank}<br/>
+                 Average rank: ${data.averageRank}`;
             
             tooltip.html(tooltipContent)
                 .style("left", (event.pageX + 10) + "px")
