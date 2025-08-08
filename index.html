@@ -121,44 +121,6 @@
             box-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
         }
 
-        .show-selector {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .show-selector select {
-            background-color: #2a2a2a;
-            color: white;
-            border: 1px solid #666;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-size: 14px;
-            margin: 0 10px;
-        }
-
-        .lifecycle-line {
-            fill: none;
-            stroke: #e50914;
-            stroke-width: 3;
-        }
-
-        .lifecycle-point {
-            fill: #e50914;
-            stroke: #fff;
-            stroke-width: 2;
-        }
-
-        .release-line {
-            stroke: #00d4ff;
-            stroke-width: 2;
-            stroke-dasharray: 5,5;
-        }
-
-        .out-of-top10 {
-            fill: #666;
-            opacity: 0.5;
-        }
-
         /* Responsive design */
         @media (max-width: 768px) {
             .container {
@@ -175,7 +137,7 @@
     <div class="container">
         <h1>Netflix Top 10 During COVID</h1>
         <p class="subtitle">Daily Rankings of Movies and TV Shows in the US from March 31st, 2020 to March 10th, 2022</p>
-        
+        <!-- TODO: change this text -->
         <div class="level-indicator">
             <span id="current-level">Level 1: The Streaming Landscape</span>
         </div>
@@ -184,11 +146,10 @@
             <div class="chart-title" id="chart-title">Loading Netflix data...</div>
             <div class="loading" id="loading">Fetching data from repository...</div>
         </div>
-        
+        <!-- CHANGED: Updated button labels to Level 1 and Level 2 -->
         <div class="navigation">
             <button class="nav-button active" id="level1-btn" disabled>Level 1</button>
             <button class="nav-button" id="level2-btn" disabled>Level 2</button>
-            <button class="nav-button" id="level3-btn" disabled>Level 3</button>
             <button class="nav-button" id="reset-btn" disabled>Reset to Overview</button>
         </div>
     </div>
@@ -593,6 +554,10 @@
             // Add interaction to show elements
             showUpdate
                 .style("cursor", "pointer")
+                .on("click", function(event, d) {
+                    pauseAnimation();
+                    drillDown(d.title, [d]);
+                })
                 .on("mouseover", function(event, d) {
                     // Highlight effect
                     d3.select(this).select(".show-bar")
@@ -672,6 +637,16 @@
             d3.select("#pause-btn")
                 .style("background-color", !animationState.isPlaying ? "#666" : "#e50914")
                 .property("disabled", !animationState.isPlaying);
+        }
+
+        // Drill down to Level 2
+        function drillDown(selectedTitle, data) {
+            currentLevel = 2;
+            updateLevelIndicator(2, "Level 2: Top 10 Most Persistent Shows");
+            updateChartTitle("Shows with Most Days in Netflix Top 10");
+            
+            drawLevel2();
+            updateNavButtons();
         }
 
         function drawLevel2() {
@@ -796,10 +771,6 @@
 
             // Add interactions
             bars.style("cursor", "pointer")
-                .on("click", function(event, d) {
-                    // Navigate to Level 3 with this show
-                    goToLevel3(d.title);
-                })
                 .on("mouseover", function(event, d) {
                     d3.select(this)
                         .transition()
@@ -821,419 +792,376 @@
                 });
         }
 
-        // NEW: Level 3 - Show Lifecycle Visualization
-        function drawLevel3(selectedShow = null) {
-            updateLevelIndicator(3, "Level 3: Show Lifecycle Analysis");
-            updateChartTitle("The Rise and Fall: Ranking Trajectory After Release");
-
-            const chartArea = svg.select(".chart-area");
-            chartArea.selectAll("*").remove();
-
-            // Remove animation controls
-            d3.select("#animation-controls").remove();
-
-            if (processedData.length === 0) {
-                showError("No valid data to display");
-                return;
-            }
-
-            // Create show selector if no show is selected
-            if (!selectedShow) {
-                selectedShow = createShowSelector();
-            }
-
-            // Get lifecycle data for selected show
-            const lifecycleData = getShowLifecycleData(selectedShow);
-            
-            if (lifecycleData.length === 0) {
-                showError("No data found for the selected show");
-                return;
-            }
-
-            console.log("Lifecycle data for", selectedShow, ":", lifecycleData);
-
-            // Set up scales
-            const chartWidth = config.width - config.margin.left - config.margin.right;
-            const chartHeight = config.height - config.margin.top - config.margin.bottom;
-
-            // Get the show's release date
-            const showData = processedData.find(d => d.title === selectedShow);
-            const releaseDate = showData ? showData.releaseDate : null;
-
-            // Time scale - extend beyond the data range to show the full story
-            const timeExtent = d3.extent(lifecycleData, d => d.date);
-            const xScale = d3.scaleTime()
-                .domain([
-                    d3.timeDay.offset(timeExtent[0], -7), // Start 7 days before first appearance
-                    d3.timeDay.offset(timeExtent[1], 30)  // End 30 days after last appearance
-                ])
-                .range([0, chartWidth]);
-
-            // Rank scale (inverted so rank 1 is at the top)
-            const yScale = d3.scaleLinear()
-                .domain([1, 15]) // Extended to show "out of top 10"
-                .range([0, chartHeight]);
-
-            // Add axes
-            const xAxis = d3.axisBottom(xScale)
-                .tickFormat(d3.timeFormat("%b %d"));
-            
-            const yAxis = d3.axisLeft(yScale)
-                .tickValues([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15])
-                .tickFormat(d => d === 15 ? "Out of Top 10" : `#${d}`);
-
-            chartArea.append("g")
-                .attr("class", "x-axis")
-                .attr("transform", `translate(0, ${chartHeight})`)
-                .call(xAxis)
-                .selectAll("text")
-                .style("fill", "#ccc")
-                .style("font-size", "11px");
-
-            chartArea.append("g")
-                .attr("class", "y-axis")
-                .call(yAxis)
-                .selectAll("text")
-                .style("fill", "#ccc")
-                .style("font-size", "11px");
-
-            // Add axis labels
-            chartArea.append("text")
-                .attr("class", "axis-label")
-                .attr("x", chartWidth / 2)
-                .attr("y", chartHeight + 50)
-                .attr("text-anchor", "middle")
-                .style("fill", "#fff")
-                .style("font-size", "14px")
-                .text("Date");
-
-            chartArea.append("text")
-                .attr("class", "axis-label")
-                .attr("transform", "rotate(-90)")
-                .attr("y", -50)
-                .attr("x", -chartHeight / 2)
-                .attr("dy", "1em")
-                .style("text-anchor", "middle")
-                .style("fill", "#fff")
-                .style("font-size", "14px")
-                .text("Ranking");
-
-            // Add background shading for "out of top 10" area
-            chartArea.append("rect")
-                .attr("class", "out-of-top10-bg")
-                .attr("x", 0)
-                .attr("y", yScale(10.5))
-                .attr("width", chartWidth)
-                .attr("height", yScale(15) - yScale(10.5))
-                .attr("fill", "#333")
-                .attr("opacity", 0.3);
-
-            chartArea.append("text")
-                .attr("x", chartWidth - 10)
-                .attr("y", yScale(12.5))
-                .attr("text-anchor", "end")
-                .style("fill", "#666")
-                .style("font-size", "12px")
-                .text("Out of Top 10");
-
-            // Add release date line if available
-            if (releaseDate && releaseDate >= xScale.domain()[0] && releaseDate <= xScale.domain()[1]) {
-                chartArea.append("line")
-                    .attr("class", "release-line")
-                    .attr("x1", xScale(releaseDate))
-                    .attr("x2", xScale(releaseDate))
-                    .attr("y1", 0)
-                    .attr("y2", chartHeight)
-                    .style("stroke", "#00d4ff")
-                    .style("stroke-width", 2)
-                    .style("stroke-dasharray", "5,5");
-
-                chartArea.append("text")
-                    .attr("x", xScale(releaseDate) + 5)
-                    .attr("y", 20)
-                    .style("fill", "#00d4ff")
-                    .style("font-size", "12px")
-                    .style("font-weight", "bold")
-                    .text("Release Date");
-            }
-
-            // Create line generator
-            const line = d3.line()
-                .x(d => xScale(d.date))
-                .y(d => yScale(d.rank))
-                .curve(d3.curveMonotoneX);
-
-            // Draw the lifecycle line
-            const path = chartArea.append("path")
-                .datum(lifecycleData)
-                .attr("class", "lifecycle-line")
-                .attr("d", line)
-                .style("fill", "none")
-                .style("stroke", "#e50914")
-                .style("stroke-width", 3);
-
-            // Animate the line drawing
-            const totalLength = path.node().getTotalLength();
-            path
-                .attr("stroke-dasharray", totalLength + " " + totalLength)
-                .attr("stroke-dashoffset", totalLength)
-                .transition()
-                .duration(2000)
-                .ease(d3.easeLinear)
-                .attr("stroke-dashoffset", 0);
-
-            // Add data points
-            const points = chartArea.selectAll(".lifecycle-point")
-                .data(lifecycleData)
-                .enter()
-                .append("circle")
-                .attr("class", "lifecycle-point")
-                .attr("cx", d => xScale(d.date))
-                .attr("cy", d => yScale(d.rank))
-                .attr("r", 0)
-                .style("fill", "#e50914")
-                .style("stroke", "#fff")
-                .style("stroke-width", 2);
-
-            // Animate points appearing
-            points.transition()
-                .duration(2000)
-                .delay((d, i) => i * 50)
-                .attr("r", 4);
-
-            // Add interactivity to points
-            points
-                .style("cursor", "pointer")
-                .on("mouseover", function(event, d) {
-                    d3.select(this)
-                        .transition()
-                        .duration(100)
-                        .attr("r", 6)
-                        .style("stroke-width", 3);
-                    
-                    showLifecycleTooltip(event, d, releaseDate);
-                })
-                .on("mouseout", function(event, d) {
-                    d3.select(this)
-                        .transition()
-                        .duration(100)
-                        .attr("r", 4)
-                        .style("stroke-width", 2);
-                    
-                    hideTooltip();
-                });
-
-            // Add summary statistics
-            addLifecycleSummary(chartArea, lifecycleData, releaseDate, chartWidth, selectedShow);
-        }
-
-        // Create show selector dropdown
-        function createShowSelector() {
-            // Remove existing selector
-            d3.select("#show-selector").remove();
-
-            // Get shows with enough data points for meaningful lifecycle analysis
+        // Calculate show persistence statistics
+        function calculateShowPersistence() {
             const showCounts = new Map();
+            
             processedData.forEach(d => {
                 if (!showCounts.has(d.title)) {
                     showCounts.set(d.title, {
                         title: d.title,
-                        count: 0,
-                        hasReleaseDate: d.releaseDate !== null
+                        type: d.type,
+                        category: d.category,
+                        daysInTop10: 0,
+                        appearances: [],
+                        bestRank: 10,
+                        averageRank: 0
                     });
                 }
-                showCounts.get(d.title).count++;
+                
+                const show = showCounts.get(d.title);
+                show.daysInTop10++;
+                show.appearances.push({
+                    date: d.date,
+                    rank: d.rank
+                });
+                show.bestRank = Math.min(show.bestRank, d.rank);
             });
 
-            // Filter shows with at least 5 data points and sort by count
-            const viableShows = Array.from(showCounts.values())
-                .filter(s => s.count >= 5)
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 30); // Top 30 shows with most data
+            // Calculate average ranks
+            showCounts.forEach(show => {
+                const totalRank = show.appearances.reduce((sum, app) => sum + app.rank, 0);
+                show.averageRank = Math.round(totalRank / show.appearances.length * 10) / 10;
+            });
 
-            const selectorDiv = d3.select("#visualization")
-                .insert("div", "svg")
-                .attr("id", "show-selector")
-                .attr("class", "show-selector");
-
-            selectorDiv.append("label")
-                .style("color", "#fff")
-                .style("font-weight", "bold")
-                .text("Select a show to analyze: ");
-
-            const select = selectorDiv.append("select")
-                .attr("id", "show-select")
-                .style("background-color", "#2a2a2a")
-                .style("color", "white")
-                .style("border", "1px solid #666")
-                .style("padding", "8px 12px")
-                .style("border-radius", "4px")
-                .style("font-size", "14px")
-                .on("change", function() {
-                    const selectedShow = this.value;
-                    drawLevel3(selectedShow);
-                });
-
-            select.selectAll("option")
-                .data(viableShows)
-                .enter()
-                .append("option")
-                .attr("value", d => d.title)
-                .text(d => `${d.title} (${d.count} days)${d.hasReleaseDate ? ' ★' : ''}`);
-
-            return viableShows[0].title; // Return first show as default
+            return Array.from(showCounts.values());
         }
 
-        // Get lifecycle data for a specific show
-        function getShowLifecycleData(showTitle) {
-            const showData = processedData
-                .filter(d => d.title === showTitle)
-                .sort((a, b) => a.date - b.date);
+        // Prepare animation data specifically for Level 2
+        function prepareLevel2AnimationData(filteredData, top10Shows) {
+            // Get unique dates sorted
+            animationState.uniqueDates = [...new Set(filteredData.map(d => d.date))]
+                .sort((a, b) => a - b);
 
-            // If we have gaps in the data, we need to interpolate "out of top 10" periods
-            const lifecycleData = [];
-            const allDates = [...new Set(processedData.map(d => d.date))].sort((a, b) => a - b);
+            // Group filtered data by date
+            animationState.dateData = d3.group(filteredData, d => d.date.getTime());
             
-            let currentShowData = [...showData];
-            let dataIndex = 0;
-
-            // Track the show's journey including out-of-top-10 periods
-            for (let i = 0; i < allDates.length; i++) {
-                const currentDate = allDates[i];
-                
-                // Check if show appears in top 10 on this date
-                const dayEntry = currentShowData[dataIndex];
-                
-                if (dayEntry && dayEntry.date.getTime() === currentDate.getTime()) {
-                    // Show is in top 10
-                    lifecycleData.push({
-                        date: currentDate,
-                        rank: dayEntry.rank,
-                        inTop10: true,
-                        type: dayEntry.type,
-                        releaseDate: dayEntry.releaseDate
-                    });
-                    dataIndex++;
-                } else if (lifecycleData.length > 0 && dataIndex < currentShowData.length) {
-                    // Show is not in top 10 but we've seen it before and will see it again
-                    // Add "out of top 10" point periodically to show gaps
-                    if (i % 7 === 0) { // Add a point every 7 days when out of top 10
-                        lifecycleData.push({
-                            date: currentDate,
-                            rank: 15, // Use 15 to represent "out of top 10"
-                            inTop10: false,
-                            type: showData[0].type,
-                            releaseDate: showData[0].releaseDate
-                        });
-                    }
-                }
-            }
-
-            return lifecycleData;
+            // For Level 2, we only show data when the top 10 persistent shows appear
+            // No need to fill missing rankings since we're only tracking specific shows
         }
 
-        // Add lifecycle summary statistics
-        function addLifecycleSummary(chartArea, lifecycleData, releaseDate, chartWidth, showTitle) {
-            const summaryGroup = chartArea.append("g")
-                .attr("class", "lifecycle-summary")
-                .attr("transform", `translate(${chartWidth - 250}, 20)`);
+        // Add legend with persistence stats - simplified for bar chart
+        function addLevel2Legend(chartArea, chartWidth, top10Shows, colorScale) {
+            const legend = chartArea.append("g")
+                .attr("class", "level2-legend")
+                .attr("transform", `translate(${chartWidth - 180}, 20)`);
 
-            // Calculate summary stats
-            const top10Data = lifecycleData.filter(d => d.inTop10);
-            const totalDays = top10Data.length;
-            const bestRank = d3.min(top10Data, d => d.rank) || "N/A";
-            const averageRank = totalDays > 0 ? Math.round(d3.mean(top10Data, d => d.rank) * 10) / 10 : "N/A";
-            
-            // Calculate days since release (if available)
-            let daysToTop10 = "N/A";
-            if (releaseDate && top10Data.length > 0) {
-                const firstTop10 = d3.min(top10Data, d => d.date);
-                daysToTop10 = Math.round((firstTop10 - releaseDate) / (1000 * 60 * 60 * 24));
-            }
-
-            // Calculate staying power (consecutive days in top 10)
-            let longestStreak = 0;
-            let currentStreak = 0;
-            const sortedDates = top10Data.map(d => d.date).sort((a, b) => a - b);
-            
-            for (let i = 0; i < sortedDates.length; i++) {
-                if (i === 0) {
-                    currentStreak = 1;
-                } else {
-                    const dayDiff = (sortedDates[i] - sortedDates[i-1]) / (1000 * 60 * 60 * 24);
-                    if (dayDiff <= 1) {
-                        currentStreak++;
-                    } else {
-                        longestStreak = Math.max(longestStreak, currentStreak);
-                        currentStreak = 1;
-                    }
-                }
-            }
-            longestStreak = Math.max(longestStreak, currentStreak);
-
-            // Add summary box
-            summaryGroup.append("rect")
-                .attr("x", -10)
+            // Title for legend
+            legend.append("text")
+                .attr("x", 0)
                 .attr("y", -10)
-                .attr("width", 240)
-                .attr("height", 150)
-                .attr("fill", "#2a2a2a")
-                .attr("stroke", "#e50914")
-                .attr("stroke-width", 1)
-                .attr("opacity", 0.9)
-                .attr("rx", 5);
-
-            // Add title
-            summaryGroup.append("text")
-                .attr("x", 5)
-                .attr("y", 10)
                 .style("fill", "#e50914")
                 .style("font-size", "14px")
                 .style("font-weight", "bold")
-                .text("Show Analytics");
+                .text("Content Type");
 
-            const stats = [
-                `Total days in Top 10: ${totalDays}`,
-                `Best rank: #${bestRank}`,
-                `Average rank: ${averageRank}`,
-                `Longest streak: ${longestStreak} days`,
-                `Days to reach Top 10: ${daysToTop10}`
+            // Show legend for content types
+            const legendData = [
+                { type: 'Movie', color: '#e50914' },
+                { type: 'TV Show', color: '#00d4ff' },
+                { type: 'Unknown', color: '#999999' }
             ];
 
-            summaryGroup.selectAll(".stat-text")
-                .data(stats)
+            const legendItems = legend.selectAll(".legend-item")
+                .data(legendData)
                 .enter()
-                .append("text")
-                .attr("class", "stat-text")
-                .attr("x", 5)
-                .attr("y", (d, i) => 30 + i * 18)
+                .append("g")
+                .attr("class", "legend-item")
+                .attr("transform", (d, i) => `translate(0, ${i * 20 + 10})`);
+
+            legendItems.append("rect")
+                .attr("width", 12)
+                .attr("height", 12)
+                .attr("fill", d => d.color);
+
+            legendItems.append("text")
+                .attr("x", 18)
+                .attr("y", 6)
+                .attr("dy", "0.35em")
                 .style("fill", "#fff")
                 .style("font-size", "12px")
-                .text(d => d);
+                .text(d => d.type);
         }
 
-        // Enhanced tooltip for lifecycle visualization
-        function showLifecycleTooltip(event, data, releaseDate) {
+        // Draw Level 2 bump chart frame
+        function drawLevel2BumpChartFrame(dateIndex, yScale, colorScale, chartWidth, chartHeight) {
+            if (dateIndex >= animationState.uniqueDates.length) {
+                return;
+            }
+
+            const currentDate = animationState.uniqueDates[dateIndex];
+            const currentData = animationState.dateData.get(currentDate.getTime()) || [];
+            
+            // Update date display
+            d3.select("#current-date")
+                .text(d3.timeFormat("%B %Y")(currentDate));
+
+            const chartArea = svg.select(".chart-area");
+            
+            // First, draw static ranking background stripes if not already drawn
+            if (chartArea.selectAll(".rank-bg").empty()) {
+                chartArea.selectAll(".rank-bg")
+                    .data([1,2,3,4,5,6,7,8,9,10])
+                    .enter()
+                    .append("rect")
+                    .attr("class", "rank-bg")
+                    .attr("x", 0)
+                    .attr("y", d => yScale(d))
+                    .attr("width", chartWidth)
+                    .attr("height", chartHeight / 10 - 2)
+                    .attr("fill", (d, i) => i % 2 === 0 ? "#2a2a2a" : "#1f1f1f")
+                    .attr("opacity", 0.3);
+            }
+            
+            // Bind data to show elements using title as key for continuity
+            const shows = chartArea.selectAll(".show-element")
+                .data(currentData, d => d.title);
+
+            // Enter new shows
+            const showEnter = shows.enter()
+                .append("g")
+                .attr("class", "show-element")
+                .attr("transform", d => `translate(0, ${yScale(d.rank)})`);
+
+            // Add colored bars for new shows
+            showEnter.append("rect")
+                .attr("class", "show-bar")
+                .attr("x", 0)
+                .attr("y", 2)
+                .attr("height", chartHeight / 10 - 4)
+                .attr("width", 0) // Start with 0 width for smooth entry
+                .attr("fill", d => colorScale(d.type))
+                .attr("opacity", 0.8)
+                .transition()
+                .duration(300)
+                .attr("width", Math.max(100, chartWidth * 0.7));
+
+            // Add title text for new shows
+            showEnter.append("text")
+                .attr("class", "show-title")
+                .attr("x", 10)
+                .attr("y", (chartHeight / 10) / 2)
+                .attr("dy", "0.35em")
+                .style("fill", "white")
+                .style("font-size", "14px")
+                .style("font-weight", "bold")
+                .style("opacity", 0)
+                .text(d => d.title.length > 30 ? d.title.substring(0, 30) + "..." : d.title)
+                .transition()
+                .duration(300)
+                .style("opacity", 1);
+
+            // Add rank number for new shows
+            showEnter.append("text")
+                .attr("class", "show-rank")
+                .attr("x", chartWidth - 10)
+                .attr("y", (chartHeight / 10) / 2)
+                .attr("text-anchor", "end")
+                .attr("dy", "0.35em")
+                .style("fill", "#999")
+                .style("font-size", "12px")
+                .style("opacity", 0)
+                .text(d => `#${d.rank}`)
+                .transition()
+                .duration(300)
+                .style("opacity", 1);
+
+            // Update existing shows - this is the key part for movement
+            const showUpdate = showEnter.merge(shows);
+
+            // Animate position changes - this creates the racing effect
+            showUpdate.transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.8 : 0)
+                .ease(d3.easeLinear)
+                .attr("transform", d => `translate(0, ${yScale(d.rank)})`);
+
+            // Update rank text
+            showUpdate.select(".show-rank")
+                .transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.4 : 0)
+                .tween("text", function(d) {
+                    const currentText = d3.select(this).text();
+                    const currentRank = parseInt(currentText.replace('#', '')) || d.rank;
+                    const interpolate = d3.interpolateNumber(currentRank, d.rank);
+                    return function(t) {
+                        d3.select(this).text(`#${Math.round(interpolate(t))}`);
+                    };
+                });
+
+            // Update bar colors (in case show changes)
+            showUpdate.select(".show-bar")
+                .transition()
+                .duration(animationState.isPlaying ? animationState.speed * 0.4 : 0)
+                .attr("fill", d => colorScale(d.type));
+
+            // Handle exiting shows (fade out)
+            shows.exit()
+                .transition()
+                .duration(300)
+                .style("opacity", 0)
+                .remove();
+
+            // Add interaction to show elements
+            showUpdate
+                .style("cursor", "pointer")
+                .on("click", function(event, d) {
+                    pauseAnimation();
+                    // Could drill down to Level 3 here
+                    console.log("Clicked on persistent show:", d.title);
+                })
+                .on("mouseover", function(event, d) {
+                    // Highlight effect
+                    d3.select(this).select(".show-bar")
+                        .transition()
+                        .duration(100)
+                        .attr("opacity", 1)
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 2);
+                    
+                    showLevel2Tooltip(event, d);
+                })
+                .on("mouseout", function(event, d) {
+                    // Remove highlight
+                    d3.select(this).select(".show-bar")
+                        .transition()
+                        .duration(100)
+                        .attr("opacity", 0.8)
+                        .attr("stroke", "none");
+                    
+                    hideTooltip();
+                });
+        }
+
+        // Enhanced tooltip for Level 2 bar chart
+        function showLevel2BarTooltip(event, data) {
             tooltip.transition()
                 .duration(200)
                 .style("opacity", .9);
-
-            let daysSinceRelease = "Unknown";
-            if (releaseDate) {
-                daysSinceRelease = Math.round((data.date - releaseDate) / (1000 * 60 * 60 * 24));
-            }
-
-            const tooltipContent = data.inTop10 ? 
-                `<strong>Rank #${data.rank}</strong><br/>
-                 Date: ${d3.timeFormat("%B %e, %Y")(data.date)}<br/>
-                 Days since release: ${daysSinceRelease}<br/>
-                 Status: In Top 10` :
-                `<strong>Out of Top 10</strong><br/>
-                 Date: ${d3.timeFormat("%B %e, %Y")(data.date)}<br/>
-                 Days since release: ${daysSinceRelease}<br/>
-                 Status: Not ranked`;
+            
+            const tooltipContent = 
+                `<strong>${data.title}</strong><br/>
+                 Type: ${data.type}<br/>
+                 <strong>Persistence Stats:</strong><br/>
+                 Total days in top 10: ${data.daysInTop10}<br/>
+                 Best rank achieved: #${data.bestRank}<br/>
+                 Average rank: ${data.averageRank}`;
             
             tooltip.html(tooltipContent)
                 .style("left", (event.pageX + 10) + "px")
                 .style("top", (event.pageY - 28) + "px");
         }
+
+        // Utility functions
+        function showTooltip(event, title, data) {
+            tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+            
+            const tooltipContent = data.isPlaceholder ? 
+                `<strong>No data</strong>` :
+                `<strong>${title}</strong><br/>
+                 Rank: #${data.rank}<br/>
+                 Type: ${data.type}<br/>
+                 Date: ${d3.timeFormat("%B %e, %Y")(data.date)}<br/>
+                 <em>Click to explore in detail</em>`;
+            
+            tooltip.html(tooltipContent)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        }
+
+        function hideTooltip() {
+            tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+        }
+
+        function updateLevelIndicator(level, text) {
+            d3.select("#current-level").text(text);
+        }
+
+        function updateChartTitle(title) {
+            d3.select("#chart-title").text(title);
+        }
+
+        function hideLoading() {
+            d3.select("#loading").style("display", "none");
+        }
+
+        function showError(message) {
+            d3.select("#loading").remove();
+            d3.select("#visualization").append("div")
+                .attr("class", "error")
+                .text(message);
+        }
+
+        // CHANGED: Updated navigation setup to use Level 1 and Level 2 buttons
+        function setupNavigation() {
+            d3.select("#level1-btn").on("click", goToLevel1);
+            d3.select("#level2-btn").on("click", goToLevel2);
+            d3.select("#reset-btn").on("click", resetToOverview);
+        }
+
+        function enableNavigation() {
+            d3.select("#reset-btn").property("disabled", false);
+            d3.select("#level1-btn").property("disabled", false);
+            d3.select("#level2-btn").property("disabled", false);
+            updateNavButtons();
+        }
+
+        // CHANGED: Updated navigation button states to show active level
+        function updateNavButtons() {
+            // Remove active class from all buttons
+            d3.selectAll(".nav-button").classed("active", false);
+            
+            // Add active class to current level button
+            if (currentLevel === 1) {
+                d3.select("#level1-btn").classed("active", true);
+            } else if (currentLevel === 2) {
+                d3.select("#level2-btn").classed("active", true);
+            }
+        }
+
+        // CHANGED: New function to go to Level 1
+        function goToLevel1() {
+            if (currentLevel !== 1) {
+                currentLevel = 1;
+                drawLevel1();
+                updateNavButtons();
+            }
+        }
+
+        // CHANGED: New function to go to Level 2
+        function goToLevel2() {
+            if (currentLevel !== 2) {
+                currentLevel = 2;
+                drawLevel2();
+                updateNavButtons();
+            }
+        }
+
+        function resetToOverview() {
+            currentLevel = 1;
+            drawLevel1();
+            updateNavButtons();
+        }
+
+        // Make the visualization responsive
+        function resizeVisualization() {
+            const container = d3.select("#visualization");
+            const containerWidth = parseInt(container.style("width"));
+            
+            if (containerWidth < config.width) {
+                svg.attr("width", containerWidth)
+                   .attr("height", (containerWidth / config.width) * config.height);
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            init();
+            window.addEventListener('resize', resizeVisualization);
+        });
+    </script>
+</body>
+</html>
