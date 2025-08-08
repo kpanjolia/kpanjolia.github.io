@@ -116,6 +116,11 @@
             cursor: not-allowed;
         }
 
+        .nav-button.active {
+            background-color: #b20710;
+            box-shadow: 0 0 10px rgba(229, 9, 20, 0.5);
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             .container {
@@ -143,8 +148,8 @@
         </div>
         <!-- TODO: change the button labels -->
         <div class="navigation">
-            <button class="nav-button" id="prev-btn" disabled>Previous Level</button>
-            <button class="nav-button" id="next-btn" disabled>Next Level</button>
+            <button class="nav-button" id="level1-btn" disabled>Previous Level</button>
+            <button class="nav-button" id="level2-btn" disabled>Next Level</button>
             <button class="nav-button" id="reset-btn" disabled>Reset to Overview</button>
         </div>
     </div>
@@ -1046,35 +1051,40 @@
         }
 
         function setupNavigation() {
-            d3.select("#prev-btn").on("click", goToPreviousLevel);
-            d3.select("#next-btn").on("click", goToNextLevel);
+            d3.select("#level1-btn").on("click", goToPreviousLevel);
+            d3.select("#level2-btn").on("click", goToNextLevel);
             d3.select("#reset-btn").on("click", resetToOverview);
         }
 
         function enableNavigation() {
             d3.select("#reset-btn").property("disabled", false);
+            d3.select("#level1-btn").property("disabled", false);
+            d3.select("#level2-btn").property("disabled", false);
             updateNavButtons();
         }
 
         function updateNavButtons() {
-            d3.select("#prev-btn").property("disabled", currentLevel === 1);
-            d3.select("#next-btn").property("disabled", currentLevel === 3);
+            d3.selectAll(".nav-button").classed("active", false);
+            
+            if (currentLevel === 1) {
+                d3.select("#level1-btn").classed("active", true);
+            } else if (currentLevel === 2) {
+                d3.select("#level2-btn").classed("active", true);
+            }
         }
 
-        function goToPreviousLevel() {
-            if (currentLevel > 1) {
-                currentLevel--;
-                if (currentLevel === 1) {
-                    drawLevel1();
-                }
+        function goToLevel1() {
+            if (currentLevel !== 1) {
+                currentLevel = 1;
+                drawLevel1();
                 updateNavButtons();
             }
         }
 
-        function goToNextLevel() {
-            if (currentLevel < 3) {
-                currentLevel++;
-                // Implement Level 3 here
+        function goToLevel2() {
+            if (currentLevel !== 2) {
+                currentLevel = 2;
+                drawLevel2();
                 updateNavButtons();
             }
         }
