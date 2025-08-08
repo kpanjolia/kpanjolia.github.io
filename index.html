@@ -139,7 +139,7 @@
         <p class="subtitle">Daily Rankings of Movies and TV Shows in the US from March 31st, 2020 to March 10th, 2022</p>
 
         <div class="level-indicator">
-            <span id="current-level">Level 2: Top 10 Most Persistent Shows</span>
+            <span id="current-level">Level 1: Top 10 Most Persistent Shows</span>
         </div>
         
         <div id="visualization">
@@ -242,7 +242,7 @@
 
         // Level 1: Animated Bump Chart visualization
         function drawLevel1() {
-            updateLevelIndicator(1, "Level 1: The Streaming Landscape");
+            updateLevelIndicator(1, "Level 2: The Streaming Landscape");
             updateChartTitle("Animated Top 10 Rankings Over Time");
 
             const chartArea = svg.select(".chart-area");
@@ -639,7 +639,7 @@
         }
 
         function drawLevel2() {
-            updateLevelIndicator(2, "Level 2: Top 10 Most Persistent Shows");
+            updateLevelIndicator(2, "Level 1: Top 10 Most Persistent Shows");
             updateChartTitle("Hall of Fame: Most Days in Netflix Top 10");
 
             const chartArea = svg.select(".chart-area");
