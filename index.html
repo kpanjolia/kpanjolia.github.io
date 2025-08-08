@@ -137,7 +137,7 @@
     <div class="container">
         <h1>Netflix Top 10 During COVID</h1>
         <p class="subtitle">Daily Rankings of Movies and TV Shows in the US from March 31st, 2020 to March 10th, 2022</p>
-        <!-- TODO: change this text -->
+
         <div class="level-indicator">
             <span id="current-level">Level 1: The Streaming Landscape</span>
         </div>
@@ -146,7 +146,7 @@
             <div class="chart-title" id="chart-title">Loading Netflix data...</div>
             <div class="loading" id="loading">Fetching data from repository...</div>
         </div>
-        <!-- CHANGED: Updated button labels to Level 1 and Level 2 -->
+  
         <div class="navigation">
             <button class="nav-button active" id="level1-btn" disabled>Level 1</button>
             <button class="nav-button" id="level2-btn" disabled>Level 2</button>
@@ -556,7 +556,6 @@
                 .style("cursor", "pointer")
                 .on("click", function(event, d) {
                     pauseAnimation();
-                    drillDown(d.title, [d]);
                 })
                 .on("mouseover", function(event, d) {
                     // Highlight effect
@@ -637,16 +636,6 @@
             d3.select("#pause-btn")
                 .style("background-color", !animationState.isPlaying ? "#666" : "#e50914")
                 .property("disabled", !animationState.isPlaying);
-        }
-
-        // Drill down to Level 2
-        function drillDown(selectedTitle, data) {
-            currentLevel = 2;
-            updateLevelIndicator(2, "Level 2: Top 10 Most Persistent Shows");
-            updateChartTitle("Shows with Most Days in Netflix Top 10");
-            
-            drawLevel2();
-            updateNavButtons();
         }
 
         function drawLevel2() {
@@ -1097,8 +1086,8 @@
 
         // CHANGED: Updated navigation setup to use Level 1 and Level 2 buttons
         function setupNavigation() {
-            d3.select("#level1-btn").on("click", goToLevel1);
-            d3.select("#level2-btn").on("click", goToLevel2);
+            d3.select("#level1-btn").on("click", goToLevel2);
+            d3.select("#level2-btn").on("click", goToLevel1);
             d3.select("#reset-btn").on("click", resetToOverview);
         }
 
